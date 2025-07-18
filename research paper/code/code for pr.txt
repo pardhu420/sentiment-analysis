@@ -1,0 +1,370 @@
+You said:
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.model_selection import train_test_split
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_curve, auc, confusion_matrix, ConfusionMatrixDisplay
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+# For mounting Google Drive
+from google.colab import drive
+
+# Mount Google Drive
+drive.mount('/content/drive')
+
+# Load Dataset
+data = pd.read_csv('/content/drive/My Drive/Colab Notebooks/IMDB Dataset.csv')
+
+# Data Preprocessing: Convert sentiment to numerical values (positive = 1, negative = 0)
+data['sentiment'] = data['sentiment'].map({'positive': 1, 'negative': 0})
+
+# Select relevant columns
+data = data[['review', 'sentiment']]
+
+# Train-test split (60% train, 40% test)
+X_train, X_test, y_train, y_test = train_test_split(data['review'], data['sentiment'], test_size=0.4, random_state=42)
+
+# Vectorize text using CountVectorizer (Bag of Words) for classical models (Naive Bayes, XGBoost, SVM)
+vectorizer = CountVectorizer(max_features=5000)
+X_train_bow = vectorizer.fit_transform(X_train).toarray()
+X_test_bow = vectorizer.transform(X_test).toarray()
+
+# Tokenization and Padding for LSTM input
+max_words = 5000
+max_seq_length = 200
+
+tokenizer = Tokenizer(num_words=max_words)
+tokenizer.fit_on_texts(X_train)
+
+X_train_seq = tokenizer.texts_to_sequences(X_train)
+X_test_seq = tokenizer.texts_to_sequences(X_test)
+
+X_train_padded = pad_sequences(X_train_seq, maxlen=max_seq_length)
+X_test_padded = pad_sequences(X_test_seq, maxlen=max_seq_length)    # Import necessary libraries for Naive Bayes
+from sklearn.naive_bayes import MultinomialNB
+
+# Initialize Naive Bayes model
+nb_model = MultinomialNB()
+
+# Train the Naive Bayes model
+nb_model.fit(X_train_bow, y_train)
+
+# Make predictions
+y_test_pred_nb = nb_model.predict(X_test_bow)
+
+# Evaluate the Naive Bayes model
+nb_accuracy = accuracy_score(y_test, y_test_pred_nb)
+nb_precision = precision_score(y_test, y_test_pred_nb)
+nb_recall = recall_score(y_test, y_test_pred_nb)
+nb_f1 = f1_score(y_test, y_test_pred_nb)
+
+print(f"Naive Bayes Accuracy: {nb_accuracy}")
+print(f"Precision: {nb_precision}")
+print(f"Recall: {nb_recall}")
+print(f"F1-Score: {nb_f1}")
+
+# Confusion Matrix
+cm_nb = confusion_matrix(y_test, y_test_pred_nb)
+ConfusionMatrixDisplay(confusion_matrix=cm_nb, display_labels=['Negative', 'Positive']).plot()
+plt.title("Naive Bayes Confusion Matrix")
+plt.show()
+
+# ROC Curve
+fpr_nb, tpr_nb, _ = roc_curve(y_test, nb_model.predict_proba(X_test_bow)[:, 1])
+roc_auc_nb = auc(fpr_nb, tpr_nb)
+
+plt.plot(fpr_nb, tpr_nb, label=f'Naive Bayes (AUC = {roc_auc_nb:.2f})')
+plt.plot([0, 1], [0, 1], 'k--')
+plt.title('ROC Curve (Naive Bayes)')
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.legend(loc='lower right')
+plt.show()    # Import necessary libraries for XGBoost
+from xgboost import XGBClassifier
+
+# Initialize XGBoost model
+xgb_model = XGBClassifier(use_label_encoder=False, eval_metric='logloss')
+
+# Train the XGBoost model
+xgb_model.fit(X_train_bow, y_train)
+
+# Make predictions
+y_test_pred_xgb = xgb_model.predict(X_test_bow)
+
+# Evaluate the XGBoost model
+xgb_accuracy = accuracy_score(y_test, y_test_pred_xgb)
+xgb_precision = precision_score(y_test, y_test_pred_xgb)
+xgb_recall = recall_score(y_test, y_test_pred_xgb)
+xgb_f1 = f1_score(y_test, y_test_pred_xgb)
+
+print(f"XGBoost Accuracy: {xgb_accuracy}")
+print(f"Precision: {xgb_precision}")
+print(f"Recall: {xgb_recall}")
+print(f"F1-Score: {xgb_f1}")
+
+# Confusion Matrix
+cm_xgb = confusion_matrix(y_test, y_test_pred_xgb)
+ConfusionMatrixDisplay(confusion_matrix=cm_xgb, display_labels=['Negative', 'Positive']).plot()
+plt.title("XGBoost Confusion Matrix")
+plt.show()
+
+# ROC Curve
+fpr_xgb, tpr_xgb, _ = roc_curve(y_test, xgb_model.predict_proba(X_test_bow)[:, 1])
+roc_auc_xgb = auc(fpr_xgb, tpr_xgb)
+
+plt.plot(fpr_xgb, tpr_xgb, label=f'XGBoost (AUC = {roc_auc_xgb:.2f})')
+plt.plot([0, 1], [0, 1], 'k--')
+plt.title('ROC Curve (XGBoost)')
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.legend(loc='lower right')
+plt.show()
+# Import necessary libraries for LSTM
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense, Embedding
+
+# Build the LSTM model
+embedding_dim = 50
+lstm_model = Sequential([
+    Embedding(input_dim=max_words, output_dim=embedding_dim, input_length=max_seq_length),
+    LSTM(units=128, return_sequences=False),
+    Dense(units=64, activation='relu'),
+    Dense(units=1, activation='sigmoid')
+])
+
+# Compile and train the LSTM model
+lstm_model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+
+history = lstm_model.fit(
+    X_train_padded, y_train, epochs=5, batch_size=64, validation_split=0.2, verbose=1
+)
+
+# Evaluate LSTM model
+y_test_prob_lstm = lstm_model.predict(X_test_padded).flatten()
+y_test_pred_lstm = (y_test_prob_lstm > 0.5).astype(int)
+
+lstm_accuracy = accuracy_score(y_test, y_test_pred_lstm)
+lstm_precision = precision_score(y_test, y_test_pred_lstm)
+lstm_recall = recall_score(y_test, y_test_pred_lstm)
+lstm_f1 = f1_score(y_test, y_test_pred_lstm)
+
+print(f"LSTM Accuracy: {lstm_accuracy}")
+print(f"Precision: {lstm_precision}")
+print(f"Recall: {lstm_recall}")
+print(f"F1-Score: {lstm_f1}")
+
+# Confusion Matrix
+cm_lstm = confusion_matrix(y_test, y_test_pred_lstm)
+ConfusionMatrixDisplay(confusion_matrix=cm_lstm, display_labels=['Negative', 'Positive']).plot()
+plt.title("LSTM Confusion Matrix")
+plt.show()
+
+# ROC Curve
+fpr_lstm, tpr_lstm, _ = roc_curve(y_test, y_test_pred_lstm)
+roc_auc_lstm = auc(fpr_lstm, tpr_lstm)
+
+plt.plot(fpr_lstm, tpr_lstm, label=f'LSTM (AUC = {roc_auc_lstm:.2f})')
+plt.plot([0, 1], [0, 1], 'k--')
+plt.title('ROC Curve (LSTM)')
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.legend(loc='lower right')
+plt.show()
+
+# Plot Training vs Validation Accuracy & Loss
+plt.figure(figsize=(12, 5))
+
+# Accuracy Plot
+plt.subplot(1, 2, 1)
+plt.plot(history.history['accuracy'], label='Training Accuracy')
+plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
+plt.title('Training vs Validation Accuracy')
+plt.xlabel('Epochs')
+plt.ylabel('Accuracy')
+plt.legend()
+
+# Loss Plot
+plt.subplot(1, 2, 2)
+plt.plot(history.history['loss'], label='Training Loss')
+plt.plot(history.history['val_loss'], label='Validation Loss')
+plt.title('Training vs Validation Loss')
+plt.xlabel('Epochs')
+plt.ylabel('Loss')
+plt.legend()
+
+plt.tight_layout()
+plt.show()
+from sklearn.linear_model import LogisticRegression
+# Step 1: Feature Extraction - Convert text data to feature vectors using Bag of Words (BoW)
+vectorizer = CountVectorizer(max_features=5000)
+X_train_bow = vectorizer.fit_transform(X_train).toarray()
+X_test_bow = vectorizer.transform(X_test).toarray()
+
+# Step 2: Train Logistic Regression on BoW features
+logistic_model = LogisticRegression(max_iter=100)
+logistic_model.fit(X_train_bow, y_train)
+
+# Step 3: Make Predictions using Logistic Regression
+y_train_pred = logistic_model.predict(X_train_bow)
+y_test_pred = logistic_model.predict(X_test_bow)
+
+# Evaluate the Logistic Regression Model
+logistic_accuracy = accuracy_score(y_test, y_test_pred)
+logistic_precision = precision_score(y_test, y_test_pred)
+logistic_recall = recall_score(y_test, y_test_pred)
+logistic_f1 = f1_score(y_test, y_test_pred)
+
+print(f"Logistic Regression Accuracy: {logistic_accuracy}")
+print(f"Precision: {logistic_precision}")
+print(f"Recall: {logistic_recall}")
+print(f"F1-Score: {logistic_f1}")             # Import necessary libraries
+from pgmpy.models import BayesianNetwork
+from pgmpy.factors.discrete import TabularCPD
+from pgmpy.inference import VariableElimination
+import numpy as np
+import matplotlib.pyplot as plt
+import networkx as nx
+
+# Create a Bayesian Network model
+model = BayesianNetwork([('sentiment', 'prediction')])
+
+# Define the CPD for sentiment (assumed equal probabilities for positive and negative sentiment)
+cpd_sentiment = TabularCPD(variable='sentiment', variable_card=2, values=[[0.5], [0.5]])
+
+# Define the CPD for prediction (conditional on sentiment)
+cpd_prediction = TabularCPD(variable='prediction', variable_card=2,
+                            values=[[0.7, 0.4],  # P(prediction=0 | sentiment=0), P(prediction=0 | sentiment=1)
+                                    [0.3, 0.6]],  # P(prediction=1 | sentiment=0), P(prediction=1 | sentiment=1)
+                            evidence=['sentiment'], evidence_card=[2])
+
+# Add the CPDs to the model
+model.add_cpds(cpd_sentiment, cpd_prediction)
+
+# Check if the model is valid
+if model.check_model():
+    print("Model is valid")
+else:
+    print("Model is invalid")
+
+# Perform Variable Elimination for inference
+inference = VariableElimination(model)
+
+# Make an inference query: we are interested in the 'prediction' variable given that 'sentiment' is 1 (positive sentiment)
+inference_query = inference.query(variables=['prediction'], evidence={'sentiment': 1})
+
+# Output the result of the inference query
+print(inference_query)
+
+
+# Assuming we have predictions from logistic regression as predictions and true sentiment labels as true_labels
+# For example:
+true_labels = np.array([1, 0, 1, 1, 0])  # True sentiment labels (e.g., 1 for positive, 0 for negative)
+predictions = np.array([1, 0, 1, 1, 1])  # Predicted sentiment labels from a model
+
+# Compare the predictions with the true labels and calculate accuracy
+accuracy = np.mean(true_labels == predictions)
+print(f'Accuracy of the model: {accuracy * 100:.2f}%')
+
+# Visualize the Bayesian Network using NetworkX and Matplotlib
+import networkx as nx
+import matplotlib.pyplot as plt
+
+# Create a directed graph using NetworkX
+G = nx.DiGraph()
+
+# Add edges based on the structure of the Bayesian Network
+G.add_edge('sentiment', 'prediction')
+
+# Create the plot
+plt.figure(figsize=(8, 6))
+nx.draw(G, with_labels=True, font_weight='bold', node_color='lightblue', font_size=10, edge_color='gray', node_size=3000)
+
+# Set plot title and display the graph
+plt.title('Bayesian Network Model', fontsize=14)
+plt.show()
+
+
+# Import necessary libraries for RNN
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import SimpleRNN, Dense, Embedding
+from tensorflow.keras.optimizers import Adam
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, roc_curve, auc
+
+# Define RNN Model
+embedding_dim = 50
+rnn_model = Sequential([
+    Embedding(input_dim=max_words, output_dim=embedding_dim, input_length=max_seq_length),
+    SimpleRNN(units=128, return_sequences=False),
+    Dense(units=64, activation='relu'),
+    Dense(units=1, activation='sigmoid')
+])
+
+# Compile the RNN Model
+rnn_model.compile(optimizer=Adam(learning_rate=0.001), loss='binary_crossentropy', metrics=['accuracy'])
+
+# Train the RNN Model
+history_rnn = rnn_model.fit(
+    X_train_padded, y_train,
+    epochs=5,  # You can increase epochs for better results
+    batch_size=64,
+    validation_split=0.2,
+    verbose=1
+)
+
+# Evaluate the RNN Model
+rnn_loss, rnn_accuracy = rnn_model.evaluate(X_test_padded, y_test, verbose=1)
+
+# Print RNN Accuracy
+print(f"RNN Model Test Accuracy: {rnn_accuracy:.2f}")
+
+# Make Predictions with RNN
+y_test_pred_rnn_prob = rnn_model.predict(X_test_padded)
+y_test_pred_rnn = (y_test_pred_rnn_prob > 0.5).astype(int).flatten()
+
+# Calculate Evaluation Metrics
+rnn_precision = precision_score(y_test, y_test_pred_rnn)
+rnn_recall = recall_score(y_test, y_test_pred_rnn)
+rnn_f1 = f1_score(y_test, y_test_pred_rnn)
+
+print(f"RNN Precision: {rnn_precision}")
+print(f"RNN Recall: {rnn_recall}")
+print(f"RNN F1-Score: {rnn_f1}")
+
+# Confusion Matrix
+cm_rnn = confusion_matrix(y_test, y_test_pred_rnn)
+ConfusionMatrixDisplay(confusion_matrix=cm_rnn, display_labels=['Negative', 'Positive']).plot()
+plt.title("RNN Confusion Matrix")
+plt.show()
+
+# ROC Curve
+fpr_rnn, tpr_rnn, _ = roc_curve(y_test, y_test_pred_rnn_prob)
+roc_auc_rnn = auc(fpr_rnn, tpr_rnn)
+
+plt.plot(fpr_rnn, tpr_rnn, label=f'RNN (AUC = {roc_auc_rnn:.2f})')
+plt.plot([0, 1], [0, 1], 'k--')
+plt.title('ROC Curve (RNN)')
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.legend(loc='lower right')
+plt.show()
+
+# Training vs Validation Accuracy Plot
+plt.plot(history_rnn.history['accuracy'], label='Training Accuracy', color='blue')
+plt.plot(history_rnn.history['val_accuracy'], label='Validation Accuracy', color='orange')
+plt.xlabel('Epochs')
+plt.ylabel('Accuracy')
+plt.title('Training vs Validation Accuracy (LSTM)')
+plt.legend()
+plt.show()
+
+# Training vs Validation Loss Plot
+plt.plot(history_rnn.history['loss'], label='Training Loss', color='blue')
+plt.plot(history_rnn.history['val_loss'], label='Validation Loss', color='orange')
+plt.xlabel('Epochs')
+plt.ylabel('Loss')
+plt.title('Training vs Validation Loss (LSTM)')
+plt.legend()
+plt.show()
